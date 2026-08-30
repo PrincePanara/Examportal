@@ -101,3 +101,9 @@ This project is open-source and available under the [MIT License](LICENSE).
 
 ## 🔗 Links
 - **GitHub Repository:** [https://github.com/PrincePanara/Examportal](https://github.com/PrincePanara/Examportal)
+
+---
+
+<p align="center">
+  Made with ❤️ by <b>PrincePanara</b>
+</p>
