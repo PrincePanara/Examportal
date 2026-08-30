@@ -91,10 +91,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setStudentUser(profile);
     } catch (err: unknown) {
       const firebaseErr = err as { code?: string; message?: string };
-      if (firebaseErr.code === 'auth/popup-closed-by-user') {
+      const code = firebaseErr.code ?? '';
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
         // User dismissed — not an error
+      } else if (code === 'auth/operation-not-allowed') {
+        setGoogleError('Google Sign-In is not enabled in Firebase Console. Please enable it under Authentication → Sign-in method → Google.');
+      } else if (code === 'auth/unauthorized-domain') {
+        setGoogleError('This domain is not authorized. Add "localhost" to Firebase Console → Authentication → Settings → Authorized domains.');
+      } else if (code === 'auth/popup-blocked') {
+        setGoogleError('The sign-in popup was blocked by your browser. Please allow popups for this site and try again.');
       } else {
-        setGoogleError('Google sign-in failed. Please try again.');
+        setGoogleError(`Sign-in failed (${code || 'unknown'}). Check the browser console for details.`);
+        console.error('[Google Sign-In Error]', err);
       }
     } finally {
       setSigningInWithGoogle(false);
