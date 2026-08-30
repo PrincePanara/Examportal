@@ -4,7 +4,9 @@ import {
   ArchiveIcon,
   CopyIcon,
   EyeIcon,
+  EyeOffIcon,
   FileTextIcon,
+  KeyIcon,
   MoreHorizontalIcon,
   PlusIcon,
   SearchIcon,
@@ -12,6 +14,7 @@ import {
   Trash2Icon,
   UploadCloudIcon } from
 'lucide-react';
+import { toast } from 'sonner';
 import { PageHeader } from '../../components/admin/PageHeader';
 import { Button, IconButton } from '../../components/ui/Button';
 import { ExamStatusBadge } from '../../components/ui/Badge';
@@ -31,27 +34,94 @@ function RowMenu({ exam }: {exam: Exam;}) {
   const { duplicateExam, setExamStatus, deleteExam } = useData();
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showCreds, setShowCreds] = useState(false);
+  const [revealPwd, setRevealPwd] = useState(false);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+      if (!ref.current?.contains(event.target as Node)) { setOpen(false); setShowCreds(false); }
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  const copyToClipboard = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error(`Couldn't copy ${label}`);
+    }
+  };
 
   const item =
   'flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ink transition-colors duration-150 ease-swift hover:bg-surface-alt';
 
   return (
     <div ref={ref} className="relative">
-      <IconButton label={`Actions for ${exam.name}`} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+      <IconButton label={`Actions for ${exam.name}`} onClick={() => setOpen(o => !o)} aria-expanded={open}>
         <MoreHorizontalIcon aria-hidden className="h-4 w-4" />
       </IconButton>
-      {open &&
-      <div className="absolute right-0 top-10 z-20 w-52 overflow-hidden rounded-xl border border-line bg-surface py-1 text-left shadow-pop">
+
+      {open && (
+        <div className="absolute right-0 top-10 z-20 w-64 overflow-hidden rounded-xl border border-line bg-surface py-1 text-left shadow-pop">
+
+          <button type="button" className={item} onClick={() => setShowCreds(s => !s)}>
+            <KeyIcon aria-hidden className="h-4 w-4 text-primary" />
+            <span className="text-primary font-medium">View / Copy Credentials</span>
+          </button>
+
+          {showCreds && (
+            <div className="mx-2 mb-2 rounded-lg border border-line bg-canvas p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Exam ID</p>
+                  <p className="mt-0.5 font-mono font-bold text-ink">{exam.credentials.examId}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void copyToClipboard('Exam ID', exam.credentials.examId)}
+                  className="rounded p-1 text-muted hover:bg-surface-alt hover:text-ink"
+                >
+                  <CopyIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Password</p>
+                  <p className="mt-0.5 font-mono font-bold text-ink">{revealPwd ? exam.credentials.password : '••••••••'}</p>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setRevealPwd(r => !r)}
+                    className="rounded p-1 text-muted hover:bg-surface-alt hover:text-ink"
+                  >
+                    {revealPwd ? <EyeOffIcon className="h-3.5 w-3.5" /> : <EyeIcon className="h-3.5 w-3.5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyToClipboard('Password', exam.credentials.password)}
+                    className="rounded p-1 text-muted hover:bg-surface-alt hover:text-ink"
+                  >
+                    <CopyIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void copyToClipboard('Credentials', `Exam ID: ${exam.credentials.examId}\nPassword: ${exam.credentials.password}`)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary/10"
+              >
+                <CopyIcon className="h-3 w-3" /> Copy both
+              </button>
+            </div>
+          )}
+
+          <div className="my-1 h-px bg-line" />
+
           <button
           type="button"
           className={item}
@@ -59,7 +129,6 @@ function RowMenu({ exam }: {exam: Exam;}) {
             setOpen(false);
             void duplicateExam(exam.id);
           }}>
-          
             <CopyIcon aria-hidden className="h-4 w-4 text-muted" />
             Duplicate
           </button>
@@ -71,7 +140,6 @@ function RowMenu({ exam }: {exam: Exam;}) {
             setOpen(false);
             void setExamStatus(exam.id, 'draft');
           }}>
-          
               <UploadCloudIcon aria-hidden className="h-4 w-4 text-muted" />
               Unpublish
             </button> :
@@ -84,11 +152,10 @@ function RowMenu({ exam }: {exam: Exam;}) {
             setOpen(false);
             void setExamStatus(exam.id, 'published');
           }}>
-          
               <UploadCloudIcon aria-hidden className="h-4 w-4 text-muted" />
               Publish
             </button>
-        }
+          }
           <button
           type="button"
           className={item}
@@ -96,7 +163,6 @@ function RowMenu({ exam }: {exam: Exam;}) {
             setOpen(false);
             void setExamStatus(exam.id, 'archived');
           }}>
-          
             <ArchiveIcon aria-hidden className="h-4 w-4 text-muted" />
             Archive
           </button>
@@ -108,17 +174,16 @@ function RowMenu({ exam }: {exam: Exam;}) {
             setOpen(false);
             setConfirmDelete(true);
           }}>
-          
             <Trash2Icon aria-hidden className="h-4 w-4" />
             Delete
           </button>
         </div>
-      }
+      )}
 
       <ConfirmDialog
         open={confirmDelete}
         title="Delete this examination?"
-        description={`“${exam.name}” and its questions will be permanently removed. Existing results are retained for reporting.`}
+        description={`"${exam.name}" and its questions will be permanently removed. Existing results are retained for reporting.`}
         confirmLabel="Delete exam"
         destructive
         loading={busy}
