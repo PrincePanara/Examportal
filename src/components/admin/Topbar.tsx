@@ -199,9 +199,9 @@ export function Topbar({ onOpenDrawer, onToggleCollapse }: TopbarProps) {
               </div>
               <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 setOpenMenu('none');
-                logout();
+                await logout();
                 navigate('/admin/login');
               }}
               className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm font-medium text-ink transition-colors duration-150 ease-swift hover:bg-surface-alt">

@@ -51,12 +51,17 @@ function AppToaster() {
 /** Guard: requires admin to be logged in */
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isAdminAuthenticated, authLoading } = useAuth();
-  if (authLoading) return null;
+  // Show spinner while Firebase auth state resolves
+  if (authLoading) return (
+    <div className="flex min-h-screen items-center justify-center bg-canvas">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-primary" />
+    </div>
+  );
   if (!isAdminAuthenticated) return <Navigate to="/admin/login" replace />;
   return <>{children}</>;
 }
 
-/** Guard: requires student to be logged in */
+/** Guard: requires student Google auth */
 function StudentGuard({ children }: { children: React.ReactNode }) {
   const { isStudentAuthenticated, authLoading } = useAuth();
   if (authLoading) return (

@@ -138,6 +138,7 @@ function ExamEntryModal({ onClose }: { onClose: () => void }) {
 export function StudentDashboard() {
   const { studentUser, isStudentAuthenticated, logout, authLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
   const [showExamModal, setShowExamModal] = useState(false);
 
   if (authLoading) {
@@ -203,7 +204,7 @@ export function StudentDashboard() {
 
           <button
             id="logout-btn"
-            onClick={logout}
+            onClick={async () => { await logout(); navigate('/login'); }}
             className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium text-muted transition-colors hover:bg-surface-alt hover:text-ink"
           >
             <LogOutIcon className="h-4 w-4" />

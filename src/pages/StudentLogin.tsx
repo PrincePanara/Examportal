@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { ShieldCheckIcon, GraduationCapIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -119,15 +119,15 @@ export function StudentLogin() {
               <div className="h-px flex-1 bg-line" />
             </div>
 
-            {/* Admin login link */}
-            <a
-              href="/admin/login"
+            {/* Admin login link - uses Link for SPA navigation (no full page reload) */}
+            <Link
+              to="/admin/login"
               id="admin-login-link"
               className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-line bg-surface-alt px-4 py-3 text-[14px] font-semibold text-muted transition-all duration-150 hover:border-line hover:bg-surface hover:text-ink"
             >
               <ShieldCheckIcon className="h-4 w-4" />
               Login as Admin
-            </a>
+            </Link>
           </div>
 
           {/* Footer note */}

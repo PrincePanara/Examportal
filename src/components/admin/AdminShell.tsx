@@ -1,22 +1,16 @@
 import React, { useState } from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { XIcon } from 'lucide-react';
 import { SidebarNav } from './Sidebar';
 import { Topbar } from './Topbar';
 import { Wordmark } from '../Brand';
 import { IconButton } from '../ui/Button';
-import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../../utils/format';
 
 export function AdminShell() {
-  const { isAuthenticated } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-
-  if (!isAuthenticated) {
-    return <Navigate to="/admin/login" replace />;
-  }
 
   return (
     <div className="min-h-screen bg-canvas">

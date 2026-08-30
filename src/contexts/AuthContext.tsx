@@ -17,6 +17,8 @@ interface AuthContextValue {
   // Admin auth
   admin: AdminAccount | null;
   isAdminAuthenticated: boolean;
+  /** @deprecated use isAdminAuthenticated — kept for AdminShell compatibility */
+  isAuthenticated: boolean;
   isSubmitting: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
@@ -115,14 +117,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    if (studentUser) {
+    // Always clear both — handles edge cases where both could be set
+    setAdmin(null);
+    try {
       await signOut(auth);
-      setStudentUser(null);
+    } catch {
+      // signOut failure is non-critical; local state is already cleared
     }
-    if (admin) {
-      setAdmin(null);
-    }
-  }, [studentUser, admin]);
+    setStudentUser(null);
+  }, []);
 
   const clearError = useCallback(() => setError(null), []);
   const clearGoogleError = useCallback(() => setGoogleError(null), []);
