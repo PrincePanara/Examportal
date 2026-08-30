@@ -1,12 +1,14 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import { ExamSessionProvider } from './contexts/ExamSessionContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { AdminShell } from './components/admin/AdminShell';
 import { Landing } from './pages/Landing';
+import { StudentLogin } from './pages/StudentLogin';
+import { StudentDashboard } from './pages/StudentDashboard';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { Dashboard } from './pages/admin/Dashboard';
 import { Exams } from './pages/admin/Exams';
@@ -44,8 +46,26 @@ function AppToaster() {
           fontSize: '13px'
         }
       }} />);
+}
 
+/** Guard: requires admin to be logged in */
+function AdminGuard({ children }: { children: React.ReactNode }) {
+  const { isAdminAuthenticated, authLoading } = useAuth();
+  if (authLoading) return null;
+  if (!isAdminAuthenticated) return <Navigate to="/admin/login" replace />;
+  return <>{children}</>;
+}
 
+/** Guard: requires student to be logged in */
+function StudentGuard({ children }: { children: React.ReactNode }) {
+  const { isStudentAuthenticated, authLoading } = useAuth();
+  if (authLoading) return (
+    <div className="flex min-h-screen items-center justify-center bg-canvas">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-primary" />
+    </div>
+  );
+  if (!isStudentAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
 }
 
 export function App({ theme = 'light', simulateFlakyNetwork = false }: AppProps) {
@@ -61,10 +81,39 @@ export function App({ theme = 'light', simulateFlakyNetwork = false }: AppProps)
             <BrowserRouter>
               <AppToaster />
               <Routes>
+                {/* Public */}
                 <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<StudentLogin />} />
                 <Route path="/admin/login" element={<AdminLogin />} />
+
+                {/* Student (requires Google auth) */}
+                <Route
+                  path="/dashboard"
+                  element={
+                    <StudentGuard>
+                      <StudentDashboard />
+                    </StudentGuard>
+                  }
+                />
+                <Route
+                  path="/exam"
+                  element={
+                    <StudentGuard>
+                      <ExamPortal />
+                    </StudentGuard>
+                  }
+                />
+
+                {/* Admin (requires admin login) */}
                 <Route path="/admin/preview/:examId" element={<StudentPreview />} />
-                <Route path="/admin" element={<AdminShell />}>
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminGuard>
+                      <AdminShell />
+                    </AdminGuard>
+                  }
+                >
                   <Route index element={<Dashboard />} />
                   <Route path="exams" element={<Exams />} />
                   <Route path="exams/:examId" element={<ExamBuilder />} />
@@ -74,7 +123,8 @@ export function App({ theme = 'light', simulateFlakyNetwork = false }: AppProps)
                   <Route path="analytics" element={<Analytics />} />
                   <Route path="settings" element={<Settings />} />
                 </Route>
-                <Route path="/exam" element={<ExamPortal />} />
+
+                {/* 404 */}
                 <Route path="/404" element={<NotFound />} />
                 <Route path="*" element={<Navigate to="/404" replace />} />
               </Routes>
@@ -82,6 +132,6 @@ export function App({ theme = 'light', simulateFlakyNetwork = false }: AppProps)
           </ExamSessionProvider>
         </DataProvider>
       </AuthProvider>
-    </ThemeProvider>);
-
+    </ThemeProvider>
+  );
 }

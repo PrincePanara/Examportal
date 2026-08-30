@@ -134,11 +134,11 @@ export const api = {
     if (!normalized || !password) {
       throw new ApiError('invalid_credentials', 'Enter your email and password to continue.');
     }
-    if (normalized !== 'admin@examly.io' || password !== 'admin1234') {
+    if (normalized !== 'princyo@gmail.com' || password !== 'princeyo@123') {
       throw new ApiError('invalid_credentials', 'Those credentials are incorrect. Please try again.');
     }
     audit('Admin signed in');
-    return { id: 'adm_01', name: 'Rhea Kapoor', email: 'admin@examly.io', role: 'Administrator' };
+    return { id: 'adm_01', name: 'Prince Panara', email: 'princyo@gmail.com', role: 'Administrator' };
   },
 
   async listExams(): Promise<Exam[]> {

@@ -138,3 +138,11 @@ export interface AdminAccount {
   email: string;
   role: string;
 }
+
+export interface StudentUser {
+  uid: string;
+  name: string;
+  email: string;
+  photoURL: string | null;
+  createdAt: string;
+}

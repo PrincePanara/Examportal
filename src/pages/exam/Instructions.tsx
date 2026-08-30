@@ -4,12 +4,14 @@ import { Wordmark } from '../../components/Brand';
 import { Button } from '../../components/ui/Button';
 import { ErrorState, Panel, Skeleton } from '../../components/ui/States';
 import { useExamSession } from '../../contexts/ExamSessionContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { api, ApiError } from '../../services/examApi';
 
 type Brief = Awaited<ReturnType<typeof api.examBrief>>;
 
 export function Instructions() {
   const { authorizedExamId, startSession, isStarting, reset } = useExamSession();
+  const { studentUser } = useAuth();
   const [brief, setBrief] = useState<Brief | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -150,7 +152,7 @@ export function Instructions() {
               className="mt-5 w-full sm:w-auto"
               disabled={!acknowledged}
               loading={isStarting}
-              onClick={() => void startSession()}>
+              onClick={() => void startSession(studentUser?.name)}>
               
                 {isStarting ? 'Starting examination' : 'Start examination'}
               </Button>
