@@ -1,4 +1,29 @@
-import { defaultRules, defaultSecurity, seedExams } from '../data/exams';
+/**
+ * examApi.ts — Firestore-backed examination service
+ *
+ * Exam CRUD (create, read, update, delete, credentials) → Firebase Firestore
+ * Exam sessions (in-progress answers, grading, submission) → In-memory (per-session, by design)
+ * Question bank, candidates, results, analytics → In-memory seed (admin-only, non-critical)
+ *
+ * This architecture means:
+ *  - Admin creates/edits exams → stored in Firestore, persisted across sessions
+ *  - User enters Exam ID + Password → verified against Firestore in real-time
+ *  - The correct exam (with all questions, rules, settings) is loaded from Firestore
+ */
+
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+} from 'firebase/firestore';
+import { db } from '../firebase';
+import { defaultRules, defaultSecurity } from '../data/exams';
 import { platformTotals, seedCandidates, seedQuestionPerformance, seedResults } from '../data/people';
 import { questionBank } from '../data/questionBank';
 import type {
@@ -9,38 +34,24 @@ import type {
   ExamStatus,
   Question,
   ResultRecord,
-  SubmissionReceipt } from
-'../types';
+  SubmissionReceipt,
+} from '../types';
 import { generateExamId, generatePassword, uid } from '../utils/format';
 
-/**
- * Service layer for the examination platform.
- *
- * Every method here is the boundary the UI talks to — it mirrors the shape of a
- * real HTTP/API layer (async, throws typed errors, owns authoritative state such
- * as grading and session expiry). Swapping this file for `fetch` calls against a
- * real server requires no changes in the React tree.
- *
- * Deliberately server-owned in this abstraction, never trusted from the client:
- *   - exam authorisation (exam id + password)
- *   - exam session timing / expiry
- *   - answer persistence
- *   - grading and score calculation
- *   - duplicate submission prevention
- */
+// ─── Error Types ─────────────────────────────────────────────────────────────
 
 export type ApiErrorCode =
-'invalid_credentials' |
-'not_found' |
-'exam_not_available' |
-'exam_not_started' |
-'exam_expired' |
-'exam_full' |
-'session_expired' |
-'already_submitted' |
-'network' |
-'forbidden' |
-'server';
+  | 'invalid_credentials'
+  | 'not_found'
+  | 'exam_not_available'
+  | 'exam_not_started'
+  | 'exam_expired'
+  | 'exam_full'
+  | 'session_expired'
+  | 'already_submitted'
+  | 'network'
+  | 'forbidden'
+  | 'server';
 
 export class ApiError extends Error {
   code: ApiErrorCode;
@@ -51,27 +62,26 @@ export class ApiError extends Error {
   }
 }
 
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-interface Store {
-  exams: Exam[];
-  bank: Question[];
-  candidates: Candidate[];
-  results: ResultRecord[];
-  sessions: Record<string, ExamSession>;
-  auditLog: {id: string;action: string;at: string;}[];
+const EXAMS_COLLECTION = 'exams';
+
+/** Serialize an Exam to a plain object safe for Firestore */
+function toFirestore(exam: Exam): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(exam)) as Record<string, unknown>;
 }
 
-const store: Store = {
-  exams: clone(seedExams),
-  bank: clone(questionBank),
-  candidates: clone(seedCandidates),
-  results: clone(seedResults),
-  sessions: {},
-  auditLog: []
-};
+/** Read an exam doc from Firestore, throw if missing */
+async function fetchExam(id: string): Promise<Exam> {
+  const snap = await getDoc(doc(db, EXAMS_COLLECTION, id));
+  if (!snap.exists()) throw new ApiError('not_found', 'This examination could not be found.');
+  return snap.data() as Exam;
+}
+
+// ─── Flaky-network simulation (dev tool) ─────────────────────────────────────
 
 let flakyNetwork = false;
 let flakyStreak = 0;
@@ -89,33 +99,50 @@ function maybeFail(): void {
   }
 }
 
-function audit(action: string): void {
-  store.auditLog.unshift({ id: uid('audit'), action, at: new Date().toISOString() });
+// ─── In-memory: Sessions, question bank, candidates, results ─────────────────
+
+interface InMemoryStore {
+  bank: Question[];
+  candidates: Candidate[];
+  results: ResultRecord[];
+  sessions: Record<string, ExamSession>;
+  auditLog: { id: string; action: string; at: string }[];
 }
 
-function findExam(id: string): Exam {
-  const exam = store.exams.find((e) => e.id === id);
-  if (!exam) throw new ApiError('not_found', 'This examination could not be found.');
-  return exam;
+const mem: InMemoryStore = {
+  bank: clone(questionBank),
+  candidates: clone(seedCandidates),
+  results: clone(seedResults),
+  sessions: {},
+  auditLog: [],
+};
+
+function audit(action: string): void {
+  mem.auditLog.unshift({ id: uid('audit'), action, at: new Date().toISOString() });
 }
+
+// ─── Grading ─────────────────────────────────────────────────────────────────
 
 export function examTotalMarks(exam: Exam): number {
   return Number(exam.questions.reduce((sum, q) => sum + q.marks, 0).toFixed(2));
 }
 
-function gradeQuestion(question: Question, selected: string[], partialMarking: boolean, negativeMarking: boolean): number {
+function gradeQuestion(
+  question: Question,
+  selected: string[],
+  partialMarking: boolean,
+  negativeMarking: boolean
+): number {
   if (!selected || selected.length === 0) return 0;
   const correct = question.correctOptionIds;
   const correctPicked = selected.filter((id) => correct.includes(id));
   const wrongPicked = selected.filter((id) => !correct.includes(id));
 
   if (question.type === 'multiple') {
-    if (wrongPicked.length > 0) {
-      return negativeMarking ? -question.negativeMarks : 0;
-    }
+    if (wrongPicked.length > 0) return negativeMarking ? -question.negativeMarks : 0;
     if (correctPicked.length === correct.length) return question.marks;
     if (partialMarking) {
-      return Number((question.marks / correct.length * correctPicked.length).toFixed(2));
+      return Number(((question.marks / correct.length) * correctPicked.length).toFixed(2));
     }
     return 0;
   }
@@ -125,8 +152,11 @@ function gradeQuestion(question: Question, selected: string[], partialMarking: b
   return negativeMarking ? -question.negativeMarks : 0;
 }
 
+// ─── API ─────────────────────────────────────────────────────────────────────
+
 export const api = {
-  /* ---------------------------------------------------------------- admin */
+
+  // ──────────────────────────────────────────────── Admin auth (in-memory)
 
   async adminLogin(email: string, password: string) {
     await wait(680);
@@ -141,135 +171,154 @@ export const api = {
     return { id: 'adm_01', name: 'Prince Panara', email: 'princyo@gmail.com', role: 'Administrator' };
   },
 
+  // ──────────────────────────────────────────────── Exams (Firestore)
+
   async listExams(): Promise<Exam[]> {
-    await wait(420);
-    return clone(store.exams);
+    const snap = await getDocs(collection(db, EXAMS_COLLECTION));
+    const exams = snap.docs.map((d) => d.data() as Exam);
+    // Sort newest first client-side (avoids needing a Firestore index)
+    return exams.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   },
 
   async getExam(id: string): Promise<Exam> {
-    await wait(260);
-    return clone(findExam(id));
+    return fetchExam(id);
   },
 
   async createExam(): Promise<Exam> {
-    await wait(360);
     const name = 'Untitled examination';
+    const examId = uid('exam');
     const exam: Exam = {
-      id: uid('exam'),
+      id: examId,
       name,
       description: '',
-      instructions:
-      'Read every question carefully before answering. Your answers are saved automatically as you go.',
+      instructions: 'Read every question carefully before answering. Your answers are saved automatically as you go.',
       category: 'General',
       status: 'draft',
       questions: [],
       rules: { ...defaultRules },
       security: { ...defaultSecurity },
-      credentials: { examId: generateExamId(name), password: generatePassword(), enabled: false },
+      credentials: {
+        examId: generateExamId(name),
+        password: generatePassword(),
+        enabled: false,
+      },
       startAt: new Date().toISOString(),
       endAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
       createdAt: new Date().toISOString(),
-      participants: 0
+      participants: 0,
     };
-    store.exams.unshift(exam);
+    await setDoc(doc(db, EXAMS_COLLECTION, examId), toFirestore(exam));
     audit(`Created exam draft ${exam.credentials.examId}`);
     return clone(exam);
   },
 
   async updateExam(id: string, patch: Partial<Exam>): Promise<Exam> {
-    await wait(280);
     maybeFail();
-    const exam = findExam(id);
-    Object.assign(exam, patch);
-    audit(`Updated exam ${exam.credentials.examId}`);
-    return clone(exam);
+    const current = await fetchExam(id);
+    const updated: Exam = { ...current, ...patch };
+    await setDoc(doc(db, EXAMS_COLLECTION, id), toFirestore(updated));
+    audit(`Updated exam ${updated.credentials.examId}`);
+    return clone(updated);
   },
 
   async duplicateExam(id: string): Promise<Exam> {
-    await wait(360);
-    const source = findExam(id);
+    const source = await fetchExam(id);
+    const newId = uid('exam');
     const copy: Exam = {
       ...clone(source),
-      id: uid('exam'),
+      id: newId,
       name: `${source.name} (copy)`,
       status: 'draft',
       participants: 0,
       createdAt: new Date().toISOString(),
-      credentials: { examId: generateExamId(source.name), password: generatePassword(), enabled: false }
+      credentials: {
+        examId: generateExamId(source.name),
+        password: generatePassword(),
+        enabled: false,
+      },
     };
-    store.exams.unshift(copy);
+    await setDoc(doc(db, EXAMS_COLLECTION, newId), toFirestore(copy));
     audit(`Duplicated exam ${source.credentials.examId}`);
     return clone(copy);
   },
 
   async setExamStatus(id: string, status: ExamStatus): Promise<Exam> {
-    await wait(320);
-    const exam = findExam(id);
-    exam.status = status;
-    exam.credentials.enabled = status === 'published' || status === 'scheduled';
+    const exam = await fetchExam(id);
+    const enabled = status === 'published' || status === 'scheduled';
+    const updated: Exam = {
+      ...exam,
+      status,
+      credentials: { ...exam.credentials, enabled },
+    };
+    await setDoc(doc(db, EXAMS_COLLECTION, id), toFirestore(updated));
     audit(`Set ${exam.credentials.examId} to ${status}`);
-    return clone(exam);
+    return clone(updated);
   },
 
   async deleteExam(id: string): Promise<void> {
-    await wait(300);
-    const exam = findExam(id);
-    store.exams = store.exams.filter((e) => e.id !== id);
+    const exam = await fetchExam(id);
+    await deleteDoc(doc(db, EXAMS_COLLECTION, id));
     audit(`Deleted exam ${exam.credentials.examId}`);
   },
 
   async regenerateCredentials(id: string, regenerateId = false): Promise<Exam> {
-    await wait(420);
-    const exam = findExam(id);
-    exam.credentials.password = generatePassword();
-    if (regenerateId) exam.credentials.examId = generateExamId(exam.name);
-    audit(`Regenerated credentials for ${exam.credentials.examId}`);
-    return clone(exam);
+    const exam = await fetchExam(id);
+    const newCreds = {
+      ...exam.credentials,
+      password: generatePassword(),
+      ...(regenerateId ? { examId: generateExamId(exam.name) } : {}),
+    };
+    const updated: Exam = { ...exam, credentials: newCreds };
+    await updateDoc(doc(db, EXAMS_COLLECTION, id), { credentials: newCreds });
+    audit(`Regenerated credentials for ${newCreds.examId}`);
+    return clone(updated);
   },
 
-  /* --------------------------------------------------------- question bank */
+  // ──────────────────────────────────────────────── Question bank (in-memory)
 
   async listQuestionBank(): Promise<Question[]> {
     await wait(340);
-    return clone(store.bank);
+    return clone(mem.bank);
   },
 
   async saveBankQuestion(question: Question): Promise<Question> {
     await wait(280);
-    const index = store.bank.findIndex((q) => q.id === question.id);
-    if (index >= 0) store.bank[index] = clone(question);else
-    store.bank.unshift(clone(question));
+    const index = mem.bank.findIndex((q) => q.id === question.id);
+    if (index >= 0) mem.bank[index] = clone(question);
+    else mem.bank.unshift(clone(question));
     audit(`Saved question ${question.id} to the bank`);
     return clone(question);
   },
 
   async deleteBankQuestion(id: string): Promise<void> {
     await wait(240);
-    store.bank = store.bank.filter((q) => q.id !== id);
+    mem.bank = mem.bank.filter((q) => q.id !== id);
     audit(`Removed question ${id} from the bank`);
   },
 
-  /* ------------------------------------------------------------- candidates */
+  // ──────────────────────────────────────────────── Candidates (in-memory)
 
   async listCandidates(): Promise<Candidate[]> {
     await wait(380);
-    return clone(store.candidates);
+    return clone(mem.candidates);
   },
 
   async saveCandidate(candidate: Candidate): Promise<Candidate> {
     await wait(300);
-    const index = store.candidates.findIndex((c) => c.id === candidate.id);
-    if (index >= 0) store.candidates[index] = clone(candidate);else
-    store.candidates.unshift(clone(candidate));
+    const index = mem.candidates.findIndex((c) => c.id === candidate.id);
+    if (index >= 0) mem.candidates[index] = clone(candidate);
+    else mem.candidates.unshift(clone(candidate));
     audit(`Saved user ${candidate.email}`);
     return clone(candidate);
   },
 
-  /* ---------------------------------------------------------------- results */
+  // ──────────────────────────────────────────────── Results (in-memory)
 
   async listResults(): Promise<ResultRecord[]> {
     await wait(400);
-    return clone(store.results);
+    return clone(mem.results);
   },
 
   async analytics() {
@@ -277,41 +326,62 @@ export const api = {
     return {
       totals: platformTotals,
       questionPerformance: clone(seedQuestionPerformance),
-      auditLog: clone(store.auditLog).slice(0, 8)
+      auditLog: clone(mem.auditLog).slice(0, 8),
     };
   },
 
-  /* ------------------------------------------------------------ exam portal */
+  // ──────────────────────────────────────────────── Exam portal (Firestore)
 
-  /** Validates exam credentials. Returns only what the candidate is allowed to see. */
+  /**
+   * Verify Exam ID + Password against Firestore.
+   * Queries the exams collection by examId field (case-insensitive via normalization).
+   */
   async authorizeExam(examCode: string, password: string) {
-    await wait(720);
-    const exam = store.exams.find(
-      (e) => e.credentials.examId.toLowerCase() === examCode.trim().toLowerCase()
+    const normalizedCode = examCode.trim().toUpperCase();
+
+    // Query Firestore for an exam with this credentials.examId
+    // We store examIds as UPPERCASE, so this is an exact match
+    const q = query(
+      collection(db, EXAMS_COLLECTION),
+      where('credentials.examId', '==', normalizedCode)
     );
-    if (!exam || exam.credentials.password !== password) {
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
       throw new ApiError('invalid_credentials', 'Exam ID or password is incorrect.');
     }
-    if (!exam.credentials.enabled || exam.status === 'archived' || exam.status === 'draft') {
-      throw new ApiError('exam_not_available', 'This examination is no longer available.');
+
+    const exam = snap.docs[0].data() as Exam;
+
+    // Check password
+    if (exam.credentials.password !== password) {
+      throw new ApiError('invalid_credentials', 'Exam ID or password is incorrect.');
     }
+
+    // Check enabled & status
+    if (!exam.credentials.enabled || exam.status === 'archived' || exam.status === 'draft') {
+      throw new ApiError('exam_not_available', 'This examination is not currently available.');
+    }
+
+    // Check timing
     if (exam.status === 'completed' || new Date(exam.endAt).getTime() < Date.now()) {
       throw new ApiError('exam_expired', 'This examination has closed and can no longer be started.');
     }
+
     if (new Date(exam.startAt).getTime() > Date.now()) {
       throw new ApiError(
         'exam_not_started',
         `This examination opens on ${new Date(exam.startAt).toLocaleString()}.`
       );
     }
+
     audit(`Candidate authorised into ${exam.credentials.examId}`);
     return { examId: exam.id };
   },
 
-  /** Non-sensitive briefing shown to an authorised candidate before starting. */
+  /** Non-sensitive exam briefing for the instructions page */
   async examBrief(examId: string) {
-    await wait(320);
-    const exam = findExam(examId);
+    const exam = await fetchExam(examId);
     return {
       name: exam.name,
       description: exam.description,
@@ -324,15 +394,15 @@ export const api = {
       allowReview: exam.rules.allowReview,
       autoSubmitOnTimeout: exam.rules.autoSubmitOnTimeout,
       showResultImmediately: exam.rules.showResultImmediately,
-      security: { ...exam.security }
+      security: { ...exam.security },
     };
   },
 
-  /** Server issues the session and owns its expiry timestamp. */
+  /** Start an exam session — loads exam from Firestore, session kept in-memory */
   async startSession(examId: string, candidateName: string): Promise<ExamSession> {
-    await wait(520);
-    const exam = findExam(examId);
+    const exam = await fetchExam(examId);
     const startedAt = Date.now();
+
     const session: ExamSession = {
       id: uid('sess'),
       exam: clone(exam),
@@ -342,25 +412,26 @@ export const api = {
       answers: {},
       marked: [],
       currentIndex: 0,
-      submitted: false
+      submitted: false,
     };
+
     if (exam.rules.randomizeQuestions) {
       session.exam.questions = [...session.exam.questions].sort(() => Math.random() - 0.5);
     }
     if (exam.rules.randomizeOptions) {
       session.exam.questions = session.exam.questions.map((q) => ({
         ...q,
-        options: [...q.options].sort(() => Math.random() - 0.5)
+        options: [...q.options].sort(() => Math.random() - 0.5),
       }));
     }
-    store.sessions[session.id] = session;
+
+    mem.sessions[session.id] = session;
     return clone(session);
   },
 
   async saveAnswer(sessionId: string, questionId: string, optionIds: string[]) {
-    await wait(340);
     maybeFail();
-    const session = store.sessions[sessionId];
+    const session = mem.sessions[sessionId];
     if (!session) throw new ApiError('not_found', 'Your examination session could not be found.');
     if (session.submitted) throw new ApiError('already_submitted', 'This examination has already been submitted.');
     session.answers[questionId] = [...optionIds];
@@ -368,26 +439,22 @@ export const api = {
   },
 
   async setMarked(sessionId: string, marked: string[]) {
-    await wait(200);
-    const session = store.sessions[sessionId];
+    const session = mem.sessions[sessionId];
     if (!session) throw new ApiError('not_found', 'Your examination session could not be found.');
     session.marked = [...marked];
     return { savedAt: new Date().toISOString() };
   },
 
-  /** Grading, timing validation and duplicate-submission prevention all happen here. */
   async submitSession(
-  sessionId: string,
-  answers: AnswerMap,
-  marked: string[],
-  reason: 'manual' | 'timeout' = 'manual')
-  : Promise<SubmissionReceipt> {
+    sessionId: string,
+    answers: AnswerMap,
+    marked: string[],
+    reason: 'manual' | 'timeout' = 'manual'
+  ): Promise<SubmissionReceipt> {
     await wait(900);
-    const session = store.sessions[sessionId];
+    const session = mem.sessions[sessionId];
     if (!session) throw new ApiError('not_found', 'Your examination session could not be found.');
-    if (session.submitted) {
-      throw new ApiError('already_submitted', 'This examination has already been submitted.');
-    }
+    if (session.submitted) throw new ApiError('already_submitted', 'This examination has already been submitted.');
 
     session.answers = { ...session.answers, ...answers };
     session.marked = [...marked];
@@ -400,7 +467,7 @@ export const api = {
       raw += gradeQuestion(q, session.answers[q.id] ?? [], exam.rules.partialMarking, exam.rules.negativeMarking);
     });
     const score = Math.max(0, Number(raw.toFixed(2)));
-    const percentage = total > 0 ? Number((score / total * 100).toFixed(1)) : 0;
+    const percentage = total > 0 ? Number(((score / total) * 100).toFixed(1)) : 0;
     const answered = exam.questions.filter((q) => (session.answers[q.id] ?? []).length > 0).length;
     const passed = percentage >= exam.rules.passingScore;
 
@@ -408,7 +475,7 @@ export const api = {
       id: uid('res'),
       candidateId: 'usr_self',
       candidateName: session.candidateName,
-      candidateEmail: 'candidate@northfield.edu',
+      candidateEmail: '',
       examId: exam.id,
       examName: exam.name,
       score,
@@ -416,11 +483,23 @@ export const api = {
       percentage,
       passed,
       timeTakenSeconds: Math.round((Date.now() - session.startedAt) / 1000),
-      submittedAt: new Date().toISOString()
+      submittedAt: new Date().toISOString(),
     };
-    store.results.unshift(record);
-    const liveExam = store.exams.find((e) => e.id === exam.id);
-    if (liveExam) liveExam.participants += 1;
+
+    mem.results.unshift(record);
+
+    // Update participant count in Firestore (best-effort)
+    try {
+      const examRef = doc(db, EXAMS_COLLECTION, exam.id);
+      const latestSnap = await getDoc(examRef);
+      if (latestSnap.exists()) {
+        const latest = latestSnap.data() as Exam;
+        await updateDoc(examRef, { participants: (latest.participants ?? 0) + 1 });
+      }
+    } catch {
+      // Non-critical — don't fail the submission
+    }
+
     audit(`Submission received for ${exam.credentials.examId} (${reason})`);
 
     const resultVisible = exam.rules.showResultImmediately;
@@ -434,7 +513,7 @@ export const api = {
       totalMarks: total,
       percentage: resultVisible ? percentage : null,
       passed: resultVisible ? passed : null,
-      resultVisible
+      resultVisible,
     };
-  }
+  },
 };
