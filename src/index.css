@@ -1,0 +1,83 @@
+/* @import url() FONT IMPORTS MUST ALWAYS BE AT THE VERY TOP OF THIS FILE, ABOVE THE TAILWIND IMPORTS — DO NOT DELETE THIS COMMENT */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* CRITICAL: THE FOLLOWING TAILWIND IMPORTS MUST NEVER BE DELETED OR REORDERED — DO NOT DELETE THIS COMMENT */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* END TAILWIND IMPORTS — ALL OTHER CSS MUST GO BELOW THIS LINE */
+
+/* Design tokens are stored as RGB channels so Tailwind opacity modifiers work. */
+:root {
+  --canvas: 248 249 250;
+  --surface: 255 255 255;
+  --surface-alt: 243 244 246;
+  --line: 229 231 235;
+  --line-strong: 211 215 222;
+  --ink: 23 23 23;
+  --muted: 107 114 128;
+  --primary: 229 57 53;
+  --primary-dark: 198 40 40;
+  --primary-soft: 253 236 236;
+  --primary-border: 246 201 200;
+  --success: 21 128 61;
+  --success-soft: 234 246 238;
+  --warning: 180 83 9;
+  --warning-soft: 253 243 227;
+}
+.dark {
+  --canvas: 12 13 15;
+  --surface: 22 24 28;
+  --surface-alt: 30 33 38;
+  --line: 42 46 53;
+  --line-strong: 58 63 71;
+  --ink: 244 245 246;
+  --muted: 154 161 172;
+  --primary: 242 86 79;
+  --primary-dark: 229 57 53;
+  --primary-soft: 42 23 23;
+  --primary-border: 74 37 35;
+  --success: 74 222 128;
+  --success-soft: 20 38 26;
+  --warning: 251 191 36;
+  --warning-soft: 42 32 19;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  background-color: rgb(var(--canvas));
+  color: rgb(var(--ink));
+  -webkit-font-smoothing: antialiased;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+*:focus-visible {
+  outline: 2px solid rgb(var(--primary));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.exam-locked {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
