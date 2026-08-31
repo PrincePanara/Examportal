@@ -15,6 +15,26 @@ import { PublishStep } from '../../components/admin/builder/PublishStep';
 import { useData } from '../../contexts/DataContext';
 import type { Exam } from '../../types';
 
+function isDeepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!isDeepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (!Object.prototype.hasOwnProperty.call(b, key) || !isDeepEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
 export function ExamBuilder() {
   const { examId } = useParams<{examId: string;}>();
   const navigate = useNavigate();
@@ -34,7 +54,7 @@ export function ExamBuilder() {
 
   const dirty = useMemo(() => {
     if (!exam || !draft) return false;
-    return JSON.stringify(exam) !== JSON.stringify(draft);
+    return !isDeepEqual(exam, draft);
   }, [exam, draft]);
 
   const update = useCallback((patch: Partial<Exam>) => {
