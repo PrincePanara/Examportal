@@ -146,3 +146,17 @@ export interface StudentUser {
   photoURL: string | null;
   createdAt: string;
 }
+
+export interface ExamAttempt {
+  id: string; // `${examId}_${userId}`
+  examId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  status: 'in_progress' | 'submitted';
+  startedAt: string;
+  submittedAt?: string;
+  score?: number;
+  percentage?: number;
+  passed?: boolean;
+}

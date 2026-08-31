@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { api, ApiError, examTotalMarks } from '../services/examApi';
 import type { AnswerMap, Exam, ExamSession, SubmissionReceipt } from '../types';
 import { uid } from '../utils/format';
+import { useAuth } from './AuthContext';
 
 export type ExamStage = 'gate' | 'instructions' | 'active' | 'submitted';
 export type SaveState = 'idle' | 'saving' | 'saved' | 'offline';
@@ -35,6 +36,8 @@ interface ExamSessionContextValue {
 const ExamSessionContext = createContext<ExamSessionContextValue | null>(null);
 
 export function ExamSessionProvider({ children }: {children: React.ReactNode;}) {
+  const { studentUser } = useAuth();
+  
   const [stage, setStage] = useState<ExamStage>('gate');
   const [session, setSession] = useState<ExamSession | null>(null);
   const [isPreview, setPreview] = useState(false);
@@ -57,7 +60,7 @@ export function ExamSessionProvider({ children }: {children: React.ReactNode;}) 
     setAuthorizing(true);
     setGateError(null);
     try {
-      const { examId } = await api.authorizeExam(examCode, password);
+      const { examId } = await api.authorizeExam(examCode, password, studentUser?.uid);
       setAuthorizedExamId(examId);
       setStage('instructions');
       return true;
@@ -70,11 +73,16 @@ export function ExamSessionProvider({ children }: {children: React.ReactNode;}) 
   }, []);
 
   const startSession = useCallback(
-    async (candidateName = 'Aditi Sharma') => {
+    async (candidateName = 'Student') => {
       if (!authorizedExamId) return false;
       setStarting(true);
       try {
-        const next = await api.startSession(authorizedExamId, candidateName);
+        const next = await api.startSession(
+          authorizedExamId, 
+          studentUser?.name || candidateName, 
+          studentUser?.uid, 
+          studentUser?.email
+        );
         submittedOnce.current = false;
         setSession(next);
         setAnswers({});
@@ -199,7 +207,7 @@ export function ExamSessionProvider({ children }: {children: React.ReactNode;}) 
             resultVisible: false
           });
         } else {
-          const result = await api.submitSession(session.id, answers, marked, reason);
+          const result = await api.submitSession(session.id, answers, marked, studentUser?.uid || null, reason);
           setReceipt(result);
         }
         setStage('submitted');
@@ -211,7 +219,7 @@ export function ExamSessionProvider({ children }: {children: React.ReactNode;}) 
         setSubmitting(false);
       }
     },
-    [session, isPreview, answers, marked]
+    [session, isPreview, answers, marked, studentUser]
   );
 
   const reset = useCallback(() => {

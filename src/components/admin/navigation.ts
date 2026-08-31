@@ -23,4 +23,5 @@ export const primaryNav: NavItem[] = [
 { label: 'Users', to: '/admin/users', icon: UsersIcon },
 { label: 'Results', to: '/admin/results', icon: ClipboardListIcon },
 { label: 'Analytics', to: '/admin/analytics', icon: BarChart3Icon },
+{ label: 'Exam Analytics', to: '/admin/exam-analytics', icon: BarChart3Icon },
 { label: 'Settings', to: '/admin/settings', icon: SettingsIcon }];

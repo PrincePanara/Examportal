@@ -35,6 +35,7 @@ import type {
   Question,
   ResultRecord,
   SubmissionReceipt,
+  ExamAttempt,
 } from '../types';
 import { generateExamId, generatePassword, uid } from '../utils/format';
 
@@ -68,6 +69,7 @@ const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const EXAMS_COLLECTION = 'exams';
+const ATTEMPTS_COLLECTION = 'examAttempts';
 
 /** Serialize an Exam to a plain object safe for Firestore */
 function toFirestore(exam: Exam): Record<string, unknown> {
@@ -336,7 +338,7 @@ export const api = {
    * Verify Exam ID + Password against Firestore.
    * Queries the exams collection by examId field (case-insensitive via normalization).
    */
-  async authorizeExam(examCode: string, password: string) {
+  async authorizeExam(examCode: string, password: string, userId?: string) {
     const normalizedCode = examCode.trim().toUpperCase();
 
     // Query Firestore for an exam with this credentials.examId
@@ -375,6 +377,17 @@ export const api = {
       );
     }
 
+    if (userId) {
+      const attemptRef = doc(db, ATTEMPTS_COLLECTION, `${exam.id}_${userId}`);
+      const attemptSnap = await getDoc(attemptRef);
+      if (attemptSnap.exists()) {
+        const attempt = attemptSnap.data() as ExamAttempt;
+        if (attempt.status === 'submitted') {
+          throw new ApiError('already_submitted', 'You have already submitted this examination and cannot attempt it again.');
+        }
+      }
+    }
+
     audit(`Candidate authorised into ${exam.credentials.examId}`);
     return { examId: exam.id };
   },
@@ -398,8 +411,40 @@ export const api = {
     };
   },
 
+  async createOrResumeAttempt(examId: string, userId: string, userName: string, userEmail: string): Promise<void> {
+    const attemptId = `${examId}_${userId}`;
+    const attemptRef = doc(db, ATTEMPTS_COLLECTION, attemptId);
+    const attemptSnap = await getDoc(attemptRef);
+    if (attemptSnap.exists()) {
+      const attempt = attemptSnap.data() as ExamAttempt;
+      if (attempt.status === 'submitted') {
+        throw new ApiError('already_submitted', 'You have already submitted this examination.');
+      }
+      return; // Already in progress
+    }
+    const newAttempt: ExamAttempt = {
+      id: attemptId,
+      examId,
+      userId,
+      userName,
+      userEmail,
+      status: 'in_progress',
+      startedAt: new Date().toISOString(),
+    };
+    await setDoc(attemptRef, newAttempt);
+  },
+
+  async getExamAttempts(examId: string): Promise<ExamAttempt[]> {
+    const q = query(collection(db, ATTEMPTS_COLLECTION), where('examId', '==', examId));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data() as ExamAttempt);
+  },
+
   /** Start an exam session — loads exam from Firestore, session kept in-memory */
-  async startSession(examId: string, candidateName: string): Promise<ExamSession> {
+  async startSession(examId: string, candidateName: string, userId?: string, userEmail?: string): Promise<ExamSession> {
+    if (userId && userEmail) {
+      await this.createOrResumeAttempt(examId, userId, candidateName || 'Candidate', userEmail);
+    }
     const exam = await fetchExam(examId);
     const startedAt = Date.now();
 
@@ -449,6 +494,7 @@ export const api = {
     sessionId: string,
     answers: AnswerMap,
     marked: string[],
+    userId: string | null,
     reason: 'manual' | 'timeout' = 'manual'
   ): Promise<SubmissionReceipt> {
     await wait(900);
@@ -473,7 +519,7 @@ export const api = {
 
     const record: ResultRecord = {
       id: uid('res'),
-      candidateId: 'usr_self',
+      candidateId: userId || 'usr_self',
       candidateName: session.candidateName,
       candidateEmail: '',
       examId: exam.id,
@@ -485,6 +531,21 @@ export const api = {
       timeTakenSeconds: Math.round((Date.now() - session.startedAt) / 1000),
       submittedAt: new Date().toISOString(),
     };
+
+    if (userId) {
+      const attemptId = `${exam.id}_${userId}`;
+      try {
+        await updateDoc(doc(db, ATTEMPTS_COLLECTION, attemptId), {
+          status: 'submitted',
+          submittedAt: record.submittedAt,
+          score,
+          percentage,
+          passed,
+        });
+      } catch {
+        // Attempt update failed, but session submission completes in memory
+      }
+    }
 
     mem.results.unshift(record);
 

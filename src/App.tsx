@@ -17,6 +17,7 @@ import { QuestionBankPage } from './pages/admin/QuestionBankPage';
 import { Users } from './pages/admin/Users';
 import { Results } from './pages/admin/Results';
 import { Analytics } from './pages/admin/Analytics';
+import { ExamAnalytics } from './pages/admin/ExamAnalytics';
 import { Settings } from './pages/admin/Settings';
 import { ExamPortal } from './pages/exam/ExamPortal';
 import { StudentPreview } from './pages/admin/StudentPreview';
@@ -126,6 +127,7 @@ export function App({ theme = 'light', simulateFlakyNetwork = false }: AppProps)
                   <Route path="users" element={<Users />} />
                   <Route path="results" element={<Results />} />
                   <Route path="analytics" element={<Analytics />} />
+                  <Route path="exam-analytics" element={<ExamAnalytics />} />
                   <Route path="settings" element={<Settings />} />
                 </Route>
 
