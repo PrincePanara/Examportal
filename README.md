@@ -33,7 +33,6 @@ Follow these instructions to get a copy of the project up and running on your lo
 
 ### Prerequisites
 
-Ensure you have the following installed on your machine:
 - [Node.js](https://nodejs.org/en/) (v16.0 or higher recommended)
 - npm or yarn
 
