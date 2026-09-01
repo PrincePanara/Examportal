@@ -29,6 +29,21 @@ export function useExamLockdown(security: ExamSecurity | null, active: boolean) 
     };
     window.addEventListener('beforeunload', onBeforeUnload);
 
+    const blockPrintShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', blockPrintShortcut);
+
+    let printStyle = document.getElementById('exam-print-lockdown');
+    if (!printStyle) {
+      printStyle = document.createElement('style');
+      printStyle.id = 'exam-print-lockdown';
+      printStyle.innerHTML = `@media print { body { display: none !important; } }`;
+      document.head.appendChild(printStyle);
+    }
+
     return () => {
       document.removeEventListener('copy', block);
       document.removeEventListener('paste', block);
@@ -36,6 +51,9 @@ export function useExamLockdown(security: ExamSecurity | null, active: boolean) 
       document.removeEventListener('contextmenu', block);
       document.body.classList.remove('exam-locked');
       window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('keydown', blockPrintShortcut);
+      const style = document.getElementById('exam-print-lockdown');
+      if (style) style.remove();
     };
   }, [security, active]);
 }

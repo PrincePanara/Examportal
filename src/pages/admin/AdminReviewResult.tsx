@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
-import { ArrowLeftIcon, CheckCircleIcon, XCircleIcon, AlertCircleIcon } from 'lucide-react';
+import { ArrowLeftIcon, CheckCircleIcon, XCircleIcon, AlertCircleIcon, DownloadIcon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import type { ResultRecord } from '../../types';
 import { formatDateTime } from '../../utils/format';
+import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export function AdminReviewResult() {
   const { resultId } = useParams();
@@ -69,6 +72,72 @@ export function AdminReviewResult() {
 
   const { questions = [], answers = {} } = result;
 
+  const exportPdf = () => {
+    if (!result) return;
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(18);
+    doc.text('Detailed Examination Result', 14, 22);
+    
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Candidate: ${result.candidateName} (${result.candidateEmail})`, 14, 32);
+    doc.text(`Exam: ${result.examName} (${result.examId})`, 14, 38);
+    doc.text(`Submitted: ${formatDateTime(result.submittedAt)}`, 14, 44);
+    
+    doc.setTextColor(0);
+    doc.text(`Score: ${result.score} / ${result.totalMarks} (${result.percentage}%) - ${result.passed ? 'PASSED' : 'FAILED'}`, 14, 52);
+    doc.text(`Total Questions: ${questions.length} | Answered: ${Object.keys(answers).length}`, 14, 58);
+    
+    const tableData: any[][] = [];
+    
+    questions.forEach((q, idx) => {
+      const selectedIds = answers[q.id] || [];
+      const isCorrect = 
+        selectedIds.length === q.correctOptionIds.length && 
+        selectedIds.every(id => q.correctOptionIds.includes(id));
+      const isSkipped = selectedIds.length === 0;
+      
+      const status = isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect';
+      
+      const selectedText = selectedIds.map(id => {
+        const opt = q.options.find(o => o.id === id);
+        return opt ? opt.text : '';
+      }).join(', ');
+      
+      const correctText = q.correctOptionIds.map(id => {
+        const opt = q.options.find(o => o.id === id);
+        return opt ? opt.text : '';
+      }).join(', ');
+      
+      tableData.push([
+        `Q${idx + 1}. ${q.prompt}`,
+        status,
+        selectedText || 'None',
+        correctText
+      ]);
+    });
+
+    autoTable(doc, {
+      startY: 65,
+      head: [['Question', 'Status', 'Selected Answer', 'Correct Answer']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [63, 63, 70] },
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 45 },
+        3: { cellWidth: 45 }
+      }
+    });
+
+    doc.save(`result-${result.candidateName.replace(/\s+/g, '-')}-${result.examId}.pdf`);
+    toast.success('PDF exported successfully');
+  };
+
   return (
     <div className="min-h-screen bg-canvas pb-20">
       <header className="sticky top-0 z-40 border-b border-line bg-surface/95 px-5 py-4 backdrop-blur-sm sm:px-8">
@@ -83,11 +152,20 @@ export function AdminReviewResult() {
             <h1 className="truncate text-lg font-bold text-ink">Review: {result.examName}</h1>
             <p className="truncate text-sm text-muted">Candidate: {result.candidateName} ({result.candidateEmail})</p>
           </div>
-          <div className="text-right">
-            <p className="text-xl font-bold text-ink">{result.percentage}%</p>
-            <p className={`text-xs font-semibold uppercase tracking-wider ${result.passed ? 'text-success' : 'text-primary'}`}>
-              {result.passed ? 'Passed' : 'Failed'}
-            </p>
+          <div className="flex items-center gap-4 text-right">
+            <div>
+              <p className="text-xl font-bold text-ink">{result.percentage}%</p>
+              <p className={`text-xs font-semibold uppercase tracking-wider ${result.passed ? 'text-success' : 'text-primary'}`}>
+                {result.passed ? 'Passed' : 'Failed'}
+              </p>
+            </div>
+            <button
+              onClick={exportPdf}
+              className="flex items-center gap-2 rounded-lg bg-surface-alt px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-line"
+            >
+              <DownloadIcon className="h-4 w-4" />
+              Export PDF
+            </button>
           </div>
         </div>
       </header>

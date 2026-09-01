@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { ClipboardListIcon, DownloadIcon, SearchIcon } from 'lucide-react';
 import { PageHeader } from '../../components/admin/PageHeader';
 import { Button } from '../../components/ui/Button';
@@ -85,6 +87,42 @@ export function Results() {
     toast.success(`Exported ${filtered.length} ${filtered.length === 1 ? 'result' : 'results'}`);
   };
 
+  const exportPdf = () => {
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(20);
+    doc.text('Examination Results Report', 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Generated on ${formatDateTime(new Date().toISOString())}`, 14, 30);
+    doc.text(`Total Records: ${filtered.length}`, 14, 35);
+    
+    const tableData = filtered.map((result) => [
+      result.candidateName,
+      result.candidateEmail,
+      result.examName,
+      `${result.score}/${result.totalMarks}`,
+      `${result.percentage}%`,
+      result.passed ? 'Pass' : 'Fail',
+      formatDuration(result.timeTakenSeconds),
+      formatDateTime(result.submittedAt)
+    ]);
+
+    autoTable(doc, {
+      startY: 45,
+      head: [['Candidate', 'Email', 'Exam', 'Score', '%', 'Outcome', 'Time', 'Submitted']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [63, 63, 70] }, // Zinc 700
+      styles: { fontSize: 8 },
+    });
+
+    doc.save(`examly-results-${new Date().toISOString().slice(0, 10)}.pdf`);
+    toast.success('PDF exported successfully');
+  };
+
   if (loadError) return <ErrorState description={loadError} onRetry={() => void reload()} />;
 
   return (
@@ -94,10 +132,16 @@ export function Results() {
         description="Review submissions, outcomes, and performance across every examination."
         breadcrumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Results' }]}
         actions={
-        <Button variant="secondary" disabled={filtered.length === 0} onClick={exportCsv}>
-            <DownloadIcon aria-hidden className="h-4 w-4" />
-            Export CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" disabled={filtered.length === 0} onClick={exportCsv}>
+              <DownloadIcon aria-hidden className="h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button variant="secondary" disabled={filtered.length === 0} onClick={exportPdf}>
+              <DownloadIcon aria-hidden className="h-4 w-4" />
+              Export PDF
+            </Button>
+          </div>
         } />
       
 
