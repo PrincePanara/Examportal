@@ -29,12 +29,24 @@ export function useExamLockdown(security: ExamSecurity | null, active: boolean) 
     };
     window.addEventListener('beforeunload', onBeforeUnload);
 
-    const blockPrintShortcut = (event: KeyboardEvent) => {
+    const blockShortcuts = (event: KeyboardEvent) => {
+      // Block Print (Ctrl+P or Cmd+P)
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
         event.preventDefault();
       }
+      // Block F12 (DevTools)
+      if (event.key === 'F12') {
+        event.preventDefault();
+      }
+      // Block Ctrl+Shift+I / Ctrl+Shift+J / Cmd+Option+I / Cmd+Option+J (DevTools)
+      if ((event.ctrlKey || event.metaKey) && (event.shiftKey || event.altKey)) {
+        const key = event.key.toLowerCase();
+        if (key === 'i' || key === 'j' || key === 'c' || key === 'u') {
+          event.preventDefault();
+        }
+      }
     };
-    window.addEventListener('keydown', blockPrintShortcut);
+    window.addEventListener('keydown', blockShortcuts);
 
     let printStyle = document.getElementById('exam-print-lockdown');
     if (!printStyle) {
@@ -51,7 +63,7 @@ export function useExamLockdown(security: ExamSecurity | null, active: boolean) 
       document.removeEventListener('contextmenu', block);
       document.body.classList.remove('exam-locked');
       window.removeEventListener('beforeunload', onBeforeUnload);
-      window.removeEventListener('keydown', blockPrintShortcut);
+      window.removeEventListener('keydown', blockShortcuts);
       const style = document.getElementById('exam-print-lockdown');
       if (style) style.remove();
     };
