@@ -22,6 +22,7 @@ import { Settings } from './pages/admin/Settings';
 import { ExamPortal } from './pages/exam/ExamPortal';
 import { StudentPreview } from './pages/admin/StudentPreview';
 import { NotFound } from './pages/NotFound';
+import { ReviewExam } from './pages/ReviewExam';
 import { setFlakyNetwork } from './services/examApi';
 
 interface AppProps {
@@ -106,6 +107,14 @@ export function App({ theme = 'light', simulateFlakyNetwork = false }: AppProps)
                   element={
                     <StudentGuard>
                       <ExamPortal />
+                    </StudentGuard>
+                  }
+                />
+                <Route
+                  path="/review/:resultId"
+                  element={
+                    <StudentGuard>
+                      <ReviewExam />
                     </StudentGuard>
                   }
                 />

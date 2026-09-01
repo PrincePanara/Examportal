@@ -146,9 +146,13 @@ export function Users() {
             <TR key={candidate.id}>
                   <TD>
                     <div className="flex items-center gap-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-alt text-[11px] font-semibold text-ink">
-                        {initials(candidate.name)}
-                      </span>
+                      {candidate.photoURL ? (
+                        <img src={candidate.photoURL} alt={candidate.name} className="h-8 w-8 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-alt text-[11px] font-semibold text-ink">
+                          {initials(candidate.name)}
+                        </span>
+                      )}
                       <div className="min-w-0">
                         <p className="truncate font-medium text-ink">{candidate.name}</p>
                         <p className="truncate text-xs text-muted">{candidate.email}</p>

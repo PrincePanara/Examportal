@@ -36,6 +36,7 @@ import type {
   ResultRecord,
   SubmissionReceipt,
   ExamAttempt,
+  StudentUser,
 } from '../types';
 import { generateExamId, generatePassword, uid } from '../utils/format';
 
@@ -300,11 +301,22 @@ export const api = {
     audit(`Removed question ${id} from the bank`);
   },
 
-  // ──────────────────────────────────────────────── Candidates (in-memory)
+  // ──────────────────────────────────────────────── Candidates (Firestore)
 
   async listCandidates(): Promise<Candidate[]> {
-    await wait(380);
-    return clone(mem.candidates);
+    const snap = await getDocs(collection(db, 'users'));
+    return snap.docs.map((d) => {
+      const data = d.data() as StudentUser;
+      return {
+        id: data.uid,
+        name: data.name,
+        email: data.email,
+        photoURL: data.photoURL,
+        status: 'active',
+        examsAttempted: 0,
+        lastActivity: data.createdAt,
+      } as Candidate;
+    }).sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime());
   },
 
   async saveCandidate(candidate: Candidate): Promise<Candidate> {
@@ -316,11 +328,19 @@ export const api = {
     return clone(candidate);
   },
 
-  // ──────────────────────────────────────────────── Results (in-memory)
+  // ──────────────────────────────────────────────── Results (Firestore)
 
   async listResults(): Promise<ResultRecord[]> {
-    await wait(400);
-    return clone(mem.results);
+    const snap = await getDocs(collection(db, 'results'));
+    const results = snap.docs.map((d) => d.data() as ResultRecord);
+    return results.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+  },
+
+  async getUserResults(userId: string): Promise<ResultRecord[]> {
+    const q = query(collection(db, 'results'), where('candidateId', '==', userId));
+    const snap = await getDocs(q);
+    const results = snap.docs.map((d) => d.data() as ResultRecord);
+    return results.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
   },
 
   async analytics() {
@@ -530,9 +550,21 @@ export const api = {
       passed,
       timeTakenSeconds: Math.round((Date.now() - session.startedAt) / 1000),
       submittedAt: new Date().toISOString(),
+      answers: session.answers,
+      questions: exam.questions,
     };
 
     if (userId) {
+      try {
+        const userSnap = await getDoc(doc(db, 'users', userId));
+        if (userSnap.exists()) {
+          const userData = userSnap.data() as StudentUser;
+          record.candidateName = userData.name;
+          record.candidateEmail = userData.email;
+        }
+      } catch {
+        // Fallback to session name if user fetch fails
+      }
       const attemptId = `${exam.id}_${userId}`;
       try {
         await updateDoc(doc(db, ATTEMPTS_COLLECTION, attemptId), {
@@ -547,7 +579,11 @@ export const api = {
       }
     }
 
-    mem.results.unshift(record);
+    try {
+      await setDoc(doc(db, 'results', record.id), record);
+    } catch {
+      // Even if saving result fails, we still want to finish session logic locally
+    }
 
     // Update participant count in Firestore (best-effort)
     try {

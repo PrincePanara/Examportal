@@ -9,9 +9,16 @@ service cloud.firestore {
       allow write: if request.auth != null;
     }
 
-    // Users: each user can read/write their own profile
+    // Users: each user can write their own profile, but authenticated users (admins) can read all
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Results: allow authenticated users to read and write
+    match /results/{resultId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
 
     // Exam Attempts: users can read/write their own attempts

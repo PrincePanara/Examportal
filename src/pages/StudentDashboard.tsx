@@ -8,6 +8,9 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useExamSession } from '../contexts/ExamSessionContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { api } from '../services/examApi';
+import type { ResultRecord } from '../types';
+import { formatDateTime, formatDuration } from '../utils/format';
 
 function ExamEntryModal({ onClose }: { onClose: () => void }) {
   const { authorize, isAuthorizing, gateError, clearGateError } = useExamSession();
@@ -140,6 +143,17 @@ export function StudentDashboard() {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [showExamModal, setShowExamModal] = useState(false);
+  const [results, setResults] = useState<ResultRecord[]>([]);
+  const [loadingResults, setLoadingResults] = useState(true);
+
+  React.useEffect(() => {
+    if (studentUser) {
+      api.getUserResults(studentUser.uid)
+        .then(setResults)
+        .catch(console.error)
+        .finally(() => setLoadingResults(false));
+    }
+  }, [studentUser]);
 
   if (authLoading) {
     return (
@@ -159,11 +173,17 @@ export function StudentDashboard() {
     .join('')
     .toUpperCase();
 
+  const totalExams = results.length;
+  const bestScore = totalExams > 0 ? Math.max(...results.map(r => r.percentage)) : 0;
+  const passed = results.filter(r => r.passed).length;
+  const failed = totalExams - passed;
+  const avgScore = totalExams > 0 ? results.reduce((sum, r) => sum + r.percentage, 0) / totalExams : 0;
+
   const stats = [
-    { label: 'Exams Taken', value: '0', icon: BookOpenIcon, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { label: 'Best Score', value: 'N/A', icon: TrophyIcon, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { label: 'Time Spent', value: '0 hrs', icon: ClockIcon, color: 'text-green-500', bg: 'bg-green-500/10' },
-    { label: 'Passed', value: '0', icon: CheckCircleIcon, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { label: 'Exams Taken', value: totalExams.toString(), icon: BookOpenIcon, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { label: 'Best Score', value: totalExams > 0 ? `${bestScore}%` : 'N/A', icon: TrophyIcon, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { label: 'Passed / Failed', value: `${passed} / ${failed}`, icon: CheckCircleIcon, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { label: 'Avg. Score', value: totalExams > 0 ? `${avgScore.toFixed(1)}%` : 'N/A', icon: ClockIcon, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];
 
   return (
@@ -256,26 +276,68 @@ export function StudentDashboard() {
           ))}
         </div>
 
-        {/* Recent Activity */}
-        <div className="rounded-2xl border border-line bg-surface shadow-card">
+        {/* Recent Activity / Exam History */}
+        <div className="rounded-2xl border border-line bg-surface shadow-card overflow-hidden">
           <div className="flex items-center justify-between border-b border-line px-6 py-4">
-            <h2 className="text-[15px] font-semibold text-ink">Recent Exams</h2>
-            <span className="rounded-full bg-surface-alt px-2.5 py-0.5 text-xs font-semibold text-muted">0</span>
+            <h2 className="text-[15px] font-semibold text-ink">Exam History</h2>
+            <span className="rounded-full bg-surface-alt px-2.5 py-0.5 text-xs font-semibold text-muted">{results.length}</span>
           </div>
-          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-alt">
-              <BookOpenIcon className="h-5 w-5 text-muted" />
+          
+          {loadingResults ? (
+            <div className="p-8 text-center text-sm text-muted">Loading history...</div>
+          ) : results.length === 0 ? (
+            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-alt">
+                <BookOpenIcon className="h-5 w-5 text-muted" />
+              </div>
+              <p className="text-sm font-semibold text-ink">No exams yet</p>
+              <p className="mt-1 text-xs text-muted">Enter an Exam ID and password to get started.</p>
+              <button
+                onClick={() => setShowExamModal(true)}
+                className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-surface-alt px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface hover:border-primary/40"
+              >
+                <KeyIcon className="h-4 w-4 text-primary" />
+                Enter Exam
+              </button>
             </div>
-            <p className="text-sm font-semibold text-ink">No exams yet</p>
-            <p className="mt-1 text-xs text-muted">Enter an Exam ID and password to get started.</p>
-            <button
-              onClick={() => setShowExamModal(true)}
-              className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-surface-alt px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface hover:border-primary/40"
-            >
-              <KeyIcon className="h-4 w-4 text-primary" />
-              Enter Exam
-            </button>
-          </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-ink">
+                <thead className="bg-surface-alt/50 text-xs text-muted">
+                  <tr>
+                    <th className="px-6 py-3 font-medium">Exam Name</th>
+                    <th className="px-6 py-3 font-medium">Submitted</th>
+                    <th className="px-6 py-3 font-medium text-right">Score</th>
+                    <th className="px-6 py-3 font-medium text-center">Result</th>
+                    <th className="px-6 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {results.map((result) => (
+                    <tr key={result.id} className="transition-colors hover:bg-surface-alt/30">
+                      <td className="px-6 py-4 font-medium">{result.examName}</td>
+                      <td className="px-6 py-4 text-muted whitespace-nowrap">{formatDateTime(result.submittedAt)}</td>
+                      <td className="px-6 py-4 text-right font-medium">{result.percentage}% <span className="text-xs font-normal text-muted">({result.score}/{result.totalMarks})</span></td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${result.passed ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'}`}>
+                          {result.passed ? 'Passed' : 'Failed'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => navigate(`/review/${result.id}`)}
+                          className="inline-flex items-center gap-1 rounded-lg text-sm font-medium text-primary hover:text-primary-dark hover:underline"
+                        >
+                          <EyeIcon className="h-4 w-4" />
+                          Review
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Info banner */}

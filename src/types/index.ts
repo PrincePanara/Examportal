@@ -77,6 +77,7 @@ export interface Candidate {
   id: string;
   name: string;
   email: string;
+  photoURL?: string | null;
   status: UserStatus;
   examsAttempted: number;
   lastActivity: string;
@@ -95,6 +96,8 @@ export interface ResultRecord {
   passed: boolean;
   timeTakenSeconds: number;
   submittedAt: string;
+  answers?: AnswerMap;
+  questions?: Question[];
 }
 
 export interface QuestionPerformance {
