@@ -21,7 +21,7 @@ import { formatDate, formatDateTime, greeting } from '../../utils/format';
 export function Dashboard() {
   const navigate = useNavigate();
   const { admin } = useAuth();
-  const { exams, results, analytics, loading, loadError, reload, createExam } = useData();
+  const { exams, results, candidates, analytics, loading, loadError, reload, createExam } = useData();
   const [creating, setCreating] = useState(false);
 
   const stats = useMemo(() => {
@@ -29,10 +29,10 @@ export function Dashboard() {
     return {
       total: exams.length,
       active,
-      users: analytics?.totals.totalUsers ?? 0,
-      completed: analytics?.totals.completedExams ?? 0
+      users: candidates.length,
+      completed: results.length
     };
-  }, [exams, analytics]);
+  }, [exams, candidates, results]);
 
   const recentExams = useMemo(
     () =>

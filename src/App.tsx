@@ -23,6 +23,7 @@ import { ExamPortal } from './pages/exam/ExamPortal';
 import { StudentPreview } from './pages/admin/StudentPreview';
 import { NotFound } from './pages/NotFound';
 import { ReviewExam } from './pages/ReviewExam';
+import { AdminReviewResult } from './pages/admin/AdminReviewResult';
 import { setFlakyNetwork } from './services/examApi';
 
 interface AppProps {
@@ -121,6 +122,14 @@ export function App({ theme = 'light', simulateFlakyNetwork = false }: AppProps)
 
                 {/* Admin (requires admin login) */}
                 <Route path="/admin/preview/:examId" element={<StudentPreview />} />
+                <Route
+                  path="/admin/results/:resultId"
+                  element={
+                    <AdminGuard>
+                      <AdminReviewResult />
+                    </AdminGuard>
+                  }
+                />
                 <Route
                   path="/admin"
                   element={

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ClipboardListIcon, DownloadIcon, SearchIcon } from 'lucide-react';
 import { PageHeader } from '../../components/admin/PageHeader';
@@ -21,7 +22,7 @@ export function Results() {
   const [examFilter, setExamFilter] = useState('all');
   const [outcome, setOutcome] = useState<'all' | 'pass' | 'fail'>('all');
   const [sort, setSort] = useState<SortKey>('recent');
-  const [viewing, setViewing] = useState<ResultRecord | null>(null);
+  const navigate = useNavigate();
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -216,7 +217,7 @@ export function Results() {
                   </TD>
                   <TD className="whitespace-nowrap text-muted">{formatDateTime(result.submittedAt)}</TD>
                   <TD align="right">
-                    <Button size="sm" variant="secondary" onClick={() => setViewing(result)}>
+                    <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/results/${result.id}`)}>
                       View
                     </Button>
                   </TD>
@@ -226,45 +227,6 @@ export function Results() {
           </TableWrap>
         }
       </Panel>
-
-      <Modal
-        open={viewing !== null}
-        onClose={() => setViewing(null)}
-        title={viewing ? `${viewing.candidateName} — ${viewing.examName}` : 'Result'}
-        description={viewing ? `Submitted ${formatDateTime(viewing.submittedAt)}` : undefined}>
-        
-        {viewing &&
-        <>
-            <div className="rounded-xl border border-line bg-surface-alt/50 p-5 text-center">
-              <p className="tabular text-[40px] font-semibold leading-none tracking-[-0.04em] text-ink">
-                {viewing.percentage}%
-              </p>
-              <p className="tabular mt-2 text-sm text-muted">
-                {viewing.score} of {viewing.totalMarks} marks
-              </p>
-              <div className="mt-3 flex justify-center">
-                <Badge tone={viewing.passed ? 'success' : 'primary'} dot>
-                  {viewing.passed ? 'Passed' : 'Not passed'}
-                </Badge>
-              </div>
-            </div>
-            <dl className="mt-4 divide-y divide-line overflow-hidden rounded-lg border border-line">
-              {[
-            ['Candidate', viewing.candidateName],
-            ['Email', viewing.candidateEmail],
-            ['Examination', viewing.examName],
-            ['Time taken', formatDuration(viewing.timeTakenSeconds)],
-            ['Submitted at', formatDateTime(viewing.submittedAt)]].
-            map(([label, value]) =>
-            <div key={label} className="flex items-center justify-between gap-4 px-4 py-2.5">
-                  <dt className="text-sm text-muted">{label}</dt>
-                  <dd className="truncate text-sm font-medium text-ink">{value}</dd>
-                </div>
-            )}
-            </dl>
-          </>
-        }
-      </Modal>
-    </>);
-
+    </>
+  );
 }
