@@ -43,15 +43,25 @@ export function ExamRunner() {
   useExamLockdown(exam?.security ?? null, Boolean(session) && !isPreview);
 
   React.useEffect(() => {
-    const handleExit = () => {
+    // Push dummy state to intercept first Back navigation
+    window.history.pushState(null, '', window.location.href);
+
+    const handlePopState = () => {
       if (isPreview) return;
       void submit('manual');
     };
 
-    window.addEventListener('beforeunload', handleExit);
+    const handleBeforeUnload = () => {
+      if (isPreview) return;
+      void submit('manual');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
-      window.removeEventListener('beforeunload', handleExit);
-      handleExit();
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [isPreview, submit]);
 
