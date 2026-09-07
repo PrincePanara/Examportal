@@ -2,6 +2,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper function to check if user is active
+    function isActiveUser() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc == null || !('status' in userDoc.data) || userDoc.data.status != 'disabled';
+    }
+
+    // Helper function to identify Admin (assuming admin uses this specific email)
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'princyo@gmail.com';
+    }
+
     // Exams: admin can read/write all; any authenticated user can read published exams
     match /exams/{examId} {
       // Admin write: only from server-side or authenticated with admin email
@@ -12,21 +23,24 @@ service cloud.firestore {
     // Users: each user can write their own profile, but authenticated users (admins) can read all
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      // Users can update their own profile, but cannot tamper with the 'status' field. Only Admin can do full updates.
+      allow update: if request.auth != null && (
+        isAdmin() || 
+        (request.auth.uid == userId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])))
+      );
     }
 
     // Results: allow authenticated users to read and write
     match /results/{resultId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null && (isAdmin() || isActiveUser());
     }
 
     // Exam Attempts: users can read/write their own attempts
     match /examAttempts/{attemptId} {
-      // Allow read/write if the user owns this attempt, OR allow read if admin (for simplicity, we let any authenticated user read for now, but ideally we'd have admin role checks. We will allow users to read their own, and since admin has `request.auth != null`, we'll just allow auth)
       allow read: if request.auth != null;
-      // Users can write if the document ID ends with their uid, or if they are just logged in. Let's make it secure:
-      allow write: if request.auth != null && attemptId.matches('.*_' + request.auth.uid);
+      allow write: if request.auth != null && (isAdmin() || (attemptId.matches('.*_' + request.auth.uid) && isActiveUser()));
     }
 
     // Block everything else
