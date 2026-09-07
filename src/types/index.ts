@@ -147,6 +147,7 @@ export interface StudentUser {
   name: string;
   email: string;
   photoURL: string | null;
+  status?: UserStatus;
   createdAt: string;
 }
 

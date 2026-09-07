@@ -312,7 +312,7 @@ export const api = {
         name: data.name,
         email: data.email,
         photoURL: data.photoURL,
-        status: 'active',
+        status: data.status || 'active',
         examsAttempted: 0,
         lastActivity: data.createdAt,
       } as Candidate;
@@ -321,6 +321,9 @@ export const api = {
 
   async saveCandidate(candidate: Candidate): Promise<Candidate> {
     await wait(300);
+    const userRef = doc(db, 'users', candidate.id);
+    await updateDoc(userRef, { status: candidate.status });
+
     const index = mem.candidates.findIndex((c) => c.id === candidate.id);
     if (index >= 0) mem.candidates[index] = clone(candidate);
     else mem.candidates.unshift(clone(candidate));
@@ -398,6 +401,15 @@ export const api = {
     }
 
     if (userId) {
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data() as StudentUser;
+        if (userData.status === 'disabled') {
+          throw new ApiError('forbidden', 'Your account has been disabled by the administrator. You cannot access exams.');
+        }
+      }
+
       const attemptRef = doc(db, ATTEMPTS_COLLECTION, `${exam.id}_${userId}`);
       const attemptSnap = await getDoc(attemptRef);
       if (attemptSnap.exists()) {
