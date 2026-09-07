@@ -406,7 +406,7 @@ export const api = {
       if (userSnap.exists()) {
         const userData = userSnap.data() as StudentUser;
         if (userData.status === 'disabled') {
-          throw new ApiError('forbidden', 'Your account has been disabled by the administrator. You cannot access exams.');
+          throw new ApiError('forbidden', 'Your account has been disabled by the administrator. You cannot take any examinations.');
         }
       }
 

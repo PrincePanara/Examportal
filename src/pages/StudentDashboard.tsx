@@ -252,15 +252,22 @@ export function StudentDashboard() {
             </div>
           </div>
 
-          {/* CTA: Enter Exam */}
-          <button
-            id="enter-exam-btn"
-            onClick={() => setShowExamModal(true)}
-            className="flex items-center gap-2.5 rounded-xl bg-primary px-5 py-3 text-[14px] font-semibold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-lg"
-          >
-            <KeyIcon className="h-4 w-4" />
-            Enter Exam ID &amp; Password
-          </button>
+          {/* CTA: Enter Exam or Disabled Banner */}
+          {user.status === 'disabled' ? (
+            <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-medium text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
+              <AlertCircleIcon className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>Your account has been disabled by the administrator. You cannot take any examinations.</p>
+            </div>
+          ) : (
+            <button
+              id="enter-exam-btn"
+              onClick={() => setShowExamModal(true)}
+              className="flex items-center gap-2.5 rounded-xl bg-primary px-5 py-3 text-[14px] font-semibold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-lg"
+            >
+              <KeyIcon className="h-4 w-4" />
+              Enter Exam ID &amp; Password
+            </button>
+          )}
         </div>
 
         {/* Stats */}
@@ -291,14 +298,20 @@ export function StudentDashboard() {
                 <BookOpenIcon className="h-5 w-5 text-muted" />
               </div>
               <p className="text-sm font-semibold text-ink">No exams yet</p>
-              <p className="mt-1 text-xs text-muted">Enter an Exam ID and password to get started.</p>
-              <button
-                onClick={() => setShowExamModal(true)}
-                className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-surface-alt px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface hover:border-primary/40"
-              >
-                <KeyIcon className="h-4 w-4 text-primary" />
-                Enter Exam
-              </button>
+              <p className="mt-1 text-xs text-muted">
+                {user.status === 'disabled'
+                  ? 'Your account is disabled.'
+                  : 'Enter an Exam ID and password to get started.'}
+              </p>
+              {user.status !== 'disabled' && (
+                <button
+                  onClick={() => setShowExamModal(true)}
+                  className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-surface-alt px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface hover:border-primary/40"
+                >
+                  <KeyIcon className="h-4 w-4 text-primary" />
+                  Enter Exam
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -341,9 +354,11 @@ export function StudentDashboard() {
         </div>
 
         {/* Info banner */}
-        <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-muted">
-          <span className="font-semibold text-primary">Tip:</span> Your administrator will provide you with an Exam ID and a password. Click "Enter Exam ID &amp; Password" above to begin.
-        </div>
+        {user.status !== 'disabled' && (
+          <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-muted">
+            <span className="font-semibold text-primary">Tip:</span> Your administrator will provide you with an Exam ID and a password. Click "Enter Exam ID &amp; Password" above to begin.
+          </div>
+        )}
       </main>
 
       {/* Exam Entry Modal */}

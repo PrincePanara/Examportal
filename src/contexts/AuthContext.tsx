@@ -79,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email ?? firebaseUser.email ?? '',
       photoURL: data.photoURL ?? firebaseUser.photoURL,
       createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+      status: data.status || 'active',
     };
   };
 
