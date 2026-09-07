@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
 import { AlertTriangleIcon, BookmarkIcon, ChevronLeftIcon, ChevronRightIcon, SendIcon } from 'lucide-react';
 import { ExamHeader } from './ExamHeader';
 import { QuestionCard } from './QuestionCard';
 import { QuestionNavigator } from './QuestionNavigator';
 import { SubmitDialog } from './SubmitDialog';
 import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
 import { useExamSession } from '../../contexts/ExamSessionContext';
 import { useCountdown } from '../../hooks/useCountdown';
 import { useExamLockdown } from '../../hooks/useExamLockdown';
@@ -26,6 +27,8 @@ export function ExamRunner() {
   } = useExamSession();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [leaveWarningOpen, setLeaveWarningOpen] = useState(false);
+  const hasWarnedRef = useRef(false);
 
   const exam = session?.exam ?? null;
   const questions = exam?.questions ?? [];
@@ -48,7 +51,16 @@ export function ExamRunner() {
 
     const handlePopState = () => {
       if (isPreview) return;
-      void submit('manual');
+      
+      if (!hasWarnedRef.current) {
+        hasWarnedRef.current = true;
+        // Push another state to intercept the next back
+        window.history.pushState(null, '', window.location.href);
+        setLeaveWarningOpen(true);
+      } else {
+        setLeaveWarningOpen(false);
+        void submit('manual');
+      }
     };
 
     const handleBeforeUnload = () => {
@@ -257,6 +269,22 @@ export function ExamRunner() {
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => void submit('manual')} />
       
+      <Modal
+        open={leaveWarningOpen}
+        onClose={() => {}}
+        title="Are you sure you want to leave?"
+        description="If you leave, your exam will be automatically submitted with your current answers."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setLeaveWarningOpen(false)}>
+              Stay in Exam
+            </Button>
+            <Button variant="primary" loading={isSubmitting} onClick={() => void submit('manual')}>
+              Submit &amp; Leave
+            </Button>
+          </>
+        }
+      />
     </div>);
 
 }
