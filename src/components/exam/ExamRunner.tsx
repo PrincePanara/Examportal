@@ -42,6 +42,19 @@ export function ExamRunner() {
   const secondsLeft = useCountdown(session?.expiresAt ?? null, onExpire);
   useExamLockdown(exam?.security ?? null, Boolean(session) && !isPreview);
 
+  React.useEffect(() => {
+    const handleExit = () => {
+      if (isPreview) return;
+      void submit('manual');
+    };
+
+    window.addEventListener('beforeunload', handleExit);
+    return () => {
+      window.removeEventListener('beforeunload', handleExit);
+      handleExit();
+    };
+  }, [isPreview, submit]);
+
   const counts = useMemo(() => {
     const answered = questions.filter((q) => (answers[q.id] ?? []).length > 0).length;
     return { answered, unanswered: questions.length - answered, marked: marked.length };
